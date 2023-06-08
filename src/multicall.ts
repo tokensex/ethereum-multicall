@@ -1,5 +1,4 @@
-import { BigNumber, ethers } from 'ethers';
-import { defaultAbiCoder } from 'ethers/lib/utils';
+import { BytesLike, ethers, ZeroAddress, JsonRpcProvider, Contract } from 'ethers';
 import { ExecutionType, Networks } from './enums';
 import {
   AbiItem,
@@ -17,6 +16,7 @@ import {
   MulticallOptionsWeb3,
 } from './models';
 import { Utils } from './utils';
+import { defaultAbiCoder, Interface } from '@ethersproject/abi';
 
 export class Multicall {
   // exposed as public as people can decide to use this outside multicall.call
@@ -203,7 +203,7 @@ export class Multicall {
             const decodedReturnValues = defaultAbiCoder.decode(
               // tslint:disable-next-line: no-any
               outputTypes as any,
-              this.getReturnDataFromResult(methodContext.result)
+              this.getReturnDataFromResult(methodContext.result) as unknown as BytesLike
             );
 
             returnObjectResult.callsReturnContext.push(
@@ -298,7 +298,7 @@ export class Multicall {
 
     for (let contract = 0; contract < contractCallContexts.length; contract++) {
       const contractContext = contractCallContexts[contract];
-      const executingInterface = new ethers.utils.Interface(
+      const executingInterface = new Interface(
         JSON.stringify(contractContext.abi)
       );
 
@@ -333,12 +333,12 @@ export class Multicall {
     methodName: string
   ): AbiOutput[] | undefined {
     const contract = new ethers.Contract(
-      ethers.constants.AddressZero,
+      ZeroAddress,
       abi as any
     );
     methodName = methodName.trim();
-    if (contract.interface.functions[methodName]) {
-      return contract.interface.functions[methodName].outputs;
+    if (contract.interface.getFunction(methodName)) {
+      return contract.interface.getFunction(methodName)?.outputs as unknown as AbiOutput[];
     }
 
     for (let i = 0; i < abi.length; i++) {
@@ -395,9 +395,7 @@ export class Multicall {
         )
         .call(...callParams)) as AggregateContractResponse;
 
-      contractResponse.blockNumber = BigNumber.from(
-        contractResponse.blockNumber
-      );
+      contractResponse.blockNumber
 
       return this.buildUpAggregateResponse(contractResponse, calls);
     } else {
@@ -405,9 +403,7 @@ export class Multicall {
         .aggregate(this.mapCallContextToMatchContractFormat(calls))
         .call(...callParams)) as AggregateContractResponse;
 
-      contractResponse.blockNumber = BigNumber.from(
-        contractResponse.blockNumber
-      );
+      contractResponse.blockNumber
 
       return this.buildUpAggregateResponse(contractResponse, calls);
     }
@@ -429,21 +425,20 @@ export class Multicall {
         MulticallOptionsCustomJsonRpcProvider
       >();
       if (customProvider.nodeUrl) {
-        ethersProvider = new ethers.providers.JsonRpcProvider(
+        // @ts-ignore
+        ethersProvider = new JsonRpcProvider(
           customProvider.nodeUrl
         );
       } else {
+        // @ts-ignore
         ethersProvider = ethers.getDefaultProvider();
       }
     }
 
     const network = await ethersProvider.getNetwork();
 
-    const contract = new ethers.Contract(
-      this.getContractBasedOnNetwork(network.chainId),
-      Multicall.ABI,
-      ethersProvider
-    );
+    // @ts-ignore
+    const contract = new Contract(this.getContractBasedOnNetwork(Number(network.chainId)), Multicall.ABI, ethersProvider);
     let overrideOptions = {};
     if (options.blockNumber) {
       overrideOptions = {
@@ -452,7 +447,7 @@ export class Multicall {
       };
     }
     if (this._options.tryAggregate) {
-      const contractResponse = (await contract.callStatic.tryBlockAndAggregate(
+      const contractResponse = (await contract.getFunction("tryBlockAndAggregate").staticCall(
         false,
         this.mapCallContextToMatchContractFormat(calls),
         overrideOptions
@@ -460,7 +455,7 @@ export class Multicall {
 
       return this.buildUpAggregateResponse(contractResponse, calls);
     } else {
-      const contractResponse = (await contract.callStatic.aggregate(
+      const contractResponse = (await contract.getFunction("aggregate").staticCall(
         this.mapCallContextToMatchContractFormat(calls),
         overrideOptions
       )) as AggregateContractResponse;
@@ -480,7 +475,7 @@ export class Multicall {
     calls: AggregateCallContext[]
   ): AggregateResponse {
     const aggregateResponse: AggregateResponse = {
-      blockNumber: contractResponse.blockNumber.toNumber(),
+      blockNumber: Number(contractResponse.blockNumber),
       results: [],
     };
 

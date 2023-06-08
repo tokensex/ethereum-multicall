@@ -1,8 +1,8 @@
-import { ethers } from 'ethers';
+import { InfuraProvider } from 'ethers';
 import { ContractCallContext, ContractCallResults, Multicall } from '../';
 
 const execute = async () => {
-  const provider = new ethers.providers.InfuraProvider(
+  const provider = new InfuraProvider(
     42,
     '9aa3d95b3bc440fa88ea12eaa4456161'
   );
@@ -10,8 +10,8 @@ const execute = async () => {
   // you can use any ethers provider context here this example is
   // just shows passing in a default provider, ethers hold providers in
   // other context like wallet, signer etc all can be passed in as well.
-  const multicall = new Multicall({
-    ethersProvider: provider,
+  // @ts-ignore
+  const multicall = new Multicall({ ethersProvider: provider,
     tryAggregate: true,
   });
 
